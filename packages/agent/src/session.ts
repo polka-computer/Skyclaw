@@ -20,6 +20,7 @@ import { getContextManager } from "./context.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { writeMcpConfig } from "./mcp-config.js";
 import { writeMemorySettings } from "./memory-config.js";
+import { loadSkills } from "./skills.js";
 
 export interface SessionEntry {
   session: AgentSession;
@@ -55,7 +56,13 @@ export async function getOrCreateSession(
   // Write MCP config so oh-my-pi discovers gateway tools
   const mcpDir = writeMcpConfig(opts.userId, opts.gatewayUrl, opts.token);
 
-  const systemPrompt = buildSystemPrompt(opts.userId);
+  // Load skills for system prompt
+  const skills = loadSkills();
+  if (skills.length > 0) {
+    console.log(`[agent] loaded ${skills.length} skill(s): ${skills.map((s) => s.name).join(", ")}`);
+  }
+
+  const systemPrompt = buildSystemPrompt(opts.userId, skills);
 
   const result: CreateAgentSessionResult = await createAgentSession({
     cwd: mcpDir,

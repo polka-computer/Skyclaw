@@ -5,7 +5,7 @@
   "description": "Skyclaw sprite handler — DS reader + oh-my-pi agent with MCP",
   "main": "./src/index.ts",
   "bin": {
-    "skyclaw-handler": "./src/index.ts"
+    "skyclaw-handler": "./src/cli/index.ts"
   },
   "exports": {
     ".": {
@@ -14,7 +14,7 @@
     }
   },
   "scripts": {
-    "start": "bun src/index.ts",
+    "start": "bun src/cli/index.ts start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

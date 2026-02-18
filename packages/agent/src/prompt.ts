@@ -2,8 +2,13 @@
  * System Prompt Builder — constructs the system prompt for oh-my-pi sessions.
  */
 
-export function buildSystemPrompt(userId: string): string {
-  return `You are a helpful assistant running as a Skyclaw sprite.
+import { type SkillDefinition, formatSkillsForPrompt } from "./skills.js";
+
+export function buildSystemPrompt(
+  userId: string,
+  skills?: SkillDefinition[],
+): string {
+  const base = `You are a helpful assistant running as a Skyclaw sprite.
 
 You communicate with users through MCP tools provided by the Skyclaw gateway.
 
@@ -36,4 +41,7 @@ Memory is stored at ~/skyclaw/memory/ and persists across sprite sleep/wake cycl
 3. Be concise, helpful, and friendly.
 4. If you need context, use get_conversation_history to see prior messages.
 5. Use memory tools to persist important information across sessions.`;
+
+  const skillsSuffix = skills ? formatSkillsForPrompt(skills) : "";
+  return base + skillsSuffix;
 }

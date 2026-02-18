@@ -23,5 +23,23 @@ export {
   MEMORY_DIR,
   SESSIONS_DIR,
   DATA_DIR,
+  SKILLS_DIR,
   initSkyclawDirs,
 } from "./paths.js";
+
+// Skills
+export {
+  loadSkills,
+  initSkillsDir,
+  syncBuiltinSkills,
+  formatSkillsForPrompt,
+  parseFrontmatter,
+  type SkillDefinition,
+} from "./skills.js";
+
+// Effect services
+export {
+  SessionManagerService,
+  SessionManagerLive,
+  type SessionManagerApi,
+} from "./SessionService.js";

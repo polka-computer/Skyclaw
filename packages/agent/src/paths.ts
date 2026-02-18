@@ -27,12 +27,15 @@ export const SESSIONS_DIR = join(SKYCLAW_DIR, "sessions");
 /** DS offset files */
 export const DATA_DIR = join(SKYCLAW_DIR, "data");
 
+/** Skill definitions */
+export const SKILLS_DIR = join(SKYCLAW_DIR, "skills");
+
 /**
  * Initialize the skyclaw directory structure.
  * Called by the handler at startup before anything else.
  */
 export function initSkyclawDirs(): void {
-  for (const dir of [SKYCLAW_DIR, MEMORY_DIR, SESSIONS_DIR, DATA_DIR]) {
+  for (const dir of [SKYCLAW_DIR, MEMORY_DIR, SESSIONS_DIR, DATA_DIR, SKILLS_DIR]) {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
