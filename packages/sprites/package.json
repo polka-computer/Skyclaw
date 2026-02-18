@@ -1,0 +1,22 @@
+{
+  "name": "@skyclaw/sprites",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Skyclaw Sprites client helpers",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": ["src"],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}

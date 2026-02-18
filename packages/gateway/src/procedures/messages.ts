@@ -9,6 +9,7 @@ import { publicBase } from "../orpc-context.js";
 import { normalizeHttpMessage } from "@skyclaw/connections";
 import { buildMessageEvent } from "@skyclaw/schema";
 import { appendToUserInbox, ensureUserStreams } from "../ds.js";
+import { wakeSpriteForUser, spritesEnabled } from "../sprite-wake.js";
 
 const SendInput = Schema.Struct({
   userId: Schema.String,
@@ -36,6 +37,11 @@ export const send = publicBase
     // Ensure streams exist and write to inbox
     await ensureUserStreams(normalized.userId);
     await appendToUserInbox(normalized.userId, event);
+
+    // Wake sprite handler asynchronously (don't block API response).
+    if (spritesEnabled()) {
+      void wakeSpriteForUser(normalized.userId);
+    }
 
     return { ok: true, eventId: event.id };
   });

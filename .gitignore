@@ -1,2 +1,5 @@
 _docs
 node_modules
+.env
+.env.*
+!.env.example

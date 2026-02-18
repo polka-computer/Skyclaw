@@ -17,6 +17,16 @@ bun install
 bun run typecheck
 ```
 
+## Configure Environment
+
+Create a local env file:
+
+```bash
+cp .env.example .env
+```
+
+`packages/gateway/src/config.ts` reads from environment variables, and `bun run ...` auto-loads `.env`.
+
 ## Architecture
 
 ```
@@ -64,6 +74,21 @@ Verify it's running:
 ```bash
 curl http://localhost:3000/api/health
 # {"ok":true,"service":"skyclaw-gateway"}
+```
+
+Optional sprite wake mode (in `.env`):
+
+```bash
+SPRITES_TOKEN="<sprites api token>"  # or SPRITE_TOKEN
+GATEWAY_URL="https://your-gateway-host"
+SPRITE_HANDLER_COMMAND="bunx @skyclaw/handler start"
+```
+
+With these set, every new inbox message triggers sprite service start automatically.
+To run unpublished handler code from a sprite-local repo checkout:
+
+```bash
+SPRITE_HANDLER_COMMAND="bun run /home/sprite/skyclaw/packages/handler/src/cli/index.ts start"
 ```
 
 ## Step 2 — Send a Message
@@ -154,6 +179,32 @@ SKYCLAW_TOKEN="<token>" bun run handler
 
 Send another message (step 2) and run the handler again to process it.
 
+## Sprite E2E Locally (No npm Publish Required)
+
+You can test sprite wake + handler execution without publishing `@skyclaw/handler`.
+
+1. Expose your gateway to the public internet (ngrok/Cloudflare tunnel/etc) and set `GATEWAY_URL` in `.env`.
+2. Set `SPRITES_TOKEN` (or `SPRITE_TOKEN`) in `.env`.
+3. Set `SPRITE_HANDLER_COMMAND` in `.env` to run handler from a repo checkout on the sprite:
+
+```bash
+SPRITE_HANDLER_COMMAND="bun run /home/sprite/skyclaw/packages/handler/src/cli/index.ts start"
+```
+
+4. On the sprite machine, do a one-time bootstrap:
+
+```bash
+git clone <your-repo-url> /home/sprite/skyclaw
+cd /home/sprite/skyclaw
+bun install
+```
+
+5. Start gateway locally: `bun run gateway`.
+6. Send a message via `/api/rpc/messages/send`.
+7. Check gateway logs for `[sprite] wake ...` and fetch response via `/api/rpc/responses/get`.
+
+If you prefer not to keep a repo checkout on each sprite, use the default `SPRITE_HANDLER_COMMAND=bunx @skyclaw/handler start` and publish handler versions to npm.
+
 ## Quick One-Liner Test
 
 ```bash
@@ -185,6 +236,13 @@ curl -s -X POST http://localhost:3000/api/rpc/responses/get \
 | `DS_PORT` | `4437` | Embedded Durable Streams port |
 | `JWT_SECRET` | `skyclaw-dev-secret` | JWT signing secret |
 | `SKYCLAW_ROOT` | `~/skyclaw` | Base directory for all data |
+| `GATEWAY_URL` | `http://localhost:$PORT` | External URL embedded in sprite JWTs |
+| `SPRITES_TOKEN` / `SPRITE_TOKEN` | — | Enables sprite wake orchestration from gateway (both supported) |
+| `SPRITES_API_BASE_URL` | `https://api.sprites.dev` | Sprites API base URL |
+| `SPRITE_NAME_PREFIX` | `skyclaw-` | Prefix for per-user sprite names |
+| `SPRITE_SERVICE_NAME` | `handler` | Service name created/started on each sprite |
+| `SPRITE_HANDLER_COMMAND` | `bunx @skyclaw/handler start` | Command run inside the sprite service (`SKYCLAW_TOKEN` is injected automatically) |
+| `SPRITE_SERVICE_START_DURATION` | `2s` | How long to stream service logs during start |
 | `SKYCLAW_TOKEN` | *(required for handler)* | JWT from gateway's `/api/token/:userId` |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (handler) |
 | `OPENAI_API_KEY` | — | OpenAI API key (handler) |
@@ -215,3 +273,4 @@ After running, `~/skyclaw/` will contain:
 | `@skyclaw/gateway` | Hono server + oRPC + MCP + embedded DS |
 | `@skyclaw/agent` | oh-my-pi session management + MCP integration |
 | `@skyclaw/handler` | Sprite entry point — DS reader + agent |
+| `@skyclaw/sprites` | Sprites REST client + handler service orchestration |

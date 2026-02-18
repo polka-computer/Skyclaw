@@ -24,6 +24,7 @@
     "@skyclaw/connections": "workspace:*",
     "@skyclaw/ds": "workspace:*",
     "@skyclaw/schema": "workspace:*",
+    "@skyclaw/sprites": "workspace:*",
     "effect": "^3.19.18",
     "hono": "^4.11.10",
     "jose": "^6.1.3",
