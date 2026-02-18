@@ -1,0 +1,14 @@
+{
+  "name": "skyclaw",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "typecheck": "bun run --filter '*' typecheck",
+    "gateway": "bun run packages/gateway/src/index.ts",
+    "handler": "bun run packages/handler/src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}

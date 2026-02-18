@@ -1,0 +1,25 @@
+{
+  "name": "@skyclaw/connections",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Skyclaw channel adapter interface and HTTP adapter",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": ["src"],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@skyclaw/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}
