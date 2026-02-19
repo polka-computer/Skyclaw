@@ -75,6 +75,12 @@ export interface ServiceLogEvent {
   [key: string]: unknown;
 }
 
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+}
+
 export interface SpritesClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -99,86 +105,14 @@ function buildQuery(query: Record<string, string | undefined> | undefined): stri
   return encoded.length > 0 ? `?${encoded}` : "";
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
-}
-
-function isSpriteService(value: unknown): value is SpriteService {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  return (
-    typeof value.name === "string" &&
-    typeof value.cmd === "string" &&
-    isStringArray(value.args) &&
-    isStringArray(value.needs) &&
-    (typeof value.http_port === "number" || value.http_port === null)
-  );
-}
-
-function toServiceLogEvents(value: unknown): ServiceLogEvent[] {
-  if (Array.isArray(value)) {
-    return value.filter(isRecord).map((entry) => entry as ServiceLogEvent);
-  }
-
-  if (isRecord(value)) {
-    return [value as ServiceLogEvent];
-  }
-
-  return [];
-}
-
 export function parseNdjson(raw: string): ServiceLogEvent[] {
   const trimmed = raw.trim();
-  if (!trimmed) {
-    return [];
-  }
-
-  // Some environments return JSON arrays/objects instead of newline-delimited JSON.
-  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      const events = toServiceLogEvents(parsed);
-      if (events.length > 0) {
-        return events;
-      }
-    } catch {
-      // Fall through to line-oriented parsing.
-    }
-  }
-
-  const events: ServiceLogEvent[] = [];
-  for (const line of raw.split(/\r?\n/g)) {
-    const candidate = line.trim();
-    if (!candidate || candidate.startsWith("event:")) {
-      continue;
-    }
-
-    const payload = candidate.startsWith("data:")
-      ? candidate.slice("data:".length).trim()
-      : candidate;
-    if (!payload || payload === "[DONE]") {
-      continue;
-    }
-
-    try {
-      const parsed = JSON.parse(payload);
-      events.push(...toServiceLogEvents(parsed));
-    } catch {
-      // Ignore non-JSON log framing lines.
-    }
-  }
-
-  if (events.length === 0) {
-    throw new SyntaxError("Failed to parse service logs as JSON/NDJSON");
-  }
-
-  return events;
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) return JSON.parse(trimmed);
+  return trimmed
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l.trim()));
 }
 
 export class SpritesClient {
@@ -304,31 +238,36 @@ export class SpritesClient {
     });
 
     const raw = await response.text();
-    const trimmed = raw.trim();
-
-    if (!trimmed) {
+    if (!raw.trim()) {
       return this.getService(spriteName, serviceName);
     }
 
     try {
-      const parsed = JSON.parse(trimmed);
-      if (isSpriteService(parsed)) {
-        return parsed;
-      }
+      return JSON.parse(raw) as SpriteService;
     } catch {
-      // Fall through; some environments stream NDJSON logs from PUT.
-    }
-
-    try {
-      parseNdjson(raw);
+      // PUT sometimes returns logs instead of JSON — fetch canonical state.
       return this.getService(spriteName, serviceName);
-    } catch {
-      const contentType = response.headers.get("content-type") ?? "unknown";
-      const snippet = raw.slice(0, 240).replace(/\s+/g, " ");
-      throw new Error(
-        `Sprites API PUT ${path} returned unexpected body (content-type=${contentType}): ${snippet}`,
-      );
     }
+  }
+
+  async exec(
+    spriteName: string,
+    cmd: string[],
+    options?: { env?: Record<string, string>; dir?: string },
+  ): Promise<ExecResult> {
+    const params = new URLSearchParams();
+    for (const c of cmd) {
+      params.append("cmd", c);
+    }
+    const path = `/v1/sprites/${encodeURIComponent(spriteName)}/exec?${params.toString()}`;
+    const body: Record<string, unknown> = {};
+    if (options?.env) body.env = options.env;
+    if (options?.dir) body.dir = options.dir;
+    return this.requestJson<ExecResult>(
+      "POST",
+      path,
+      Object.keys(body).length > 0 ? { body } : {},
+    );
   }
 
   async startService(

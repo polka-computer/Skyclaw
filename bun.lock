@@ -80,10 +80,9 @@
       "name": "@skyclaw/handler",
       "version": "0.1.0",
       "bin": {
-        "skyclaw-handler": "./src/index.ts",
+        "skyclaw-handler": "./src/cli/index.ts",
       },
       "dependencies": {
-        "@durable-streams/client": "^0.2.1",
         "@skyclaw/agent": "workspace:*",
         "@skyclaw/ds": "workspace:*",
         "@skyclaw/schema": "workspace:*",

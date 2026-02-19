@@ -1,0 +1,47 @@
+name: Release Handler
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install
+
+      - name: Build handler binary
+        run: bun build --compile packages/handler/src/cli/index.ts --outfile skyclaw-handler
+
+      - name: Locate native addon
+        id: native
+        run: |
+          NATIVE=$(find node_modules -path '*pi-natives/native/pi_natives.linux-x64-modern.node' | head -1)
+          if [ -z "$NATIVE" ]; then
+            NATIVE=$(find node_modules -path '*pi-natives/native/pi_natives.linux-x64*.node' | head -1)
+          fi
+          echo "path=$NATIVE" >> "$GITHUB_OUTPUT"
+          echo "Found native addon: $NATIVE"
+
+      - name: Verify binary works
+        run: |
+          cp "${{ steps.native.outputs.path }}" pi_natives.linux-x64.node
+          ./skyclaw-handler --help
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            skyclaw-handler
+            pi_natives.linux-x64.node
+            scripts/install-handler.sh

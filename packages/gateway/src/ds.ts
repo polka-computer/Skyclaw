@@ -41,8 +41,3 @@ export async function appendToUserOutbox(
   const ds = getClient();
   await ds.appendJson(DS_STREAMS.userOutbox(userId), event);
 }
-
-/** Get the DSClient for advanced operations */
-export function getDSClient(): DSClient {
-  return getClient();
-}

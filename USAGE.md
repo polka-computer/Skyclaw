@@ -79,7 +79,7 @@ curl http://localhost:3000/api/health
 Optional sprite wake mode (in `.env`):
 
 ```bash
-SPRITES_TOKEN="<sprites api token>"  # or SPRITE_TOKEN
+SPRITES_TOKEN="<sprites api token>"
 GATEWAY_URL="https://your-gateway-host"
 SPRITE_HANDLER_COMMAND="bunx @skyclaw/handler start"
 ```
@@ -184,7 +184,7 @@ Send another message (step 2) and run the handler again to process it.
 You can test sprite wake + handler execution without publishing `@skyclaw/handler`.
 
 1. Expose your gateway to the public internet (ngrok/Cloudflare tunnel/etc) and set `GATEWAY_URL` in `.env`.
-2. Set `SPRITES_TOKEN` (or `SPRITE_TOKEN`) in `.env`.
+2. Set `SPRITES_TOKEN` in `.env`.
 3. Set `SPRITE_HANDLER_COMMAND` in `.env` to run handler from a repo checkout on the sprite:
 
 ```bash
@@ -237,12 +237,13 @@ curl -s -X POST http://localhost:3000/api/rpc/responses/get \
 | `JWT_SECRET` | `skyclaw-dev-secret` | JWT signing secret |
 | `SKYCLAW_ROOT` | `~/skyclaw` | Base directory for all data |
 | `GATEWAY_URL` | `http://localhost:$PORT` | External URL embedded in sprite JWTs |
-| `SPRITES_TOKEN` / `SPRITE_TOKEN` | — | Enables sprite wake orchestration from gateway (both supported) |
+| `SPRITES_TOKEN` | — | Enables sprite wake orchestration from gateway |
 | `SPRITES_API_BASE_URL` | `https://api.sprites.dev` | Sprites API base URL |
 | `SPRITE_NAME_PREFIX` | `skyclaw-` | Prefix for per-user sprite names |
 | `SPRITE_SERVICE_NAME` | `handler` | Service name created/started on each sprite |
-| `SPRITE_HANDLER_COMMAND` | `bunx @skyclaw/handler start` | Command run inside the sprite service (`SKYCLAW_TOKEN` is injected automatically) |
+| `SPRITE_HANDLER_COMMAND` | `bunx @skyclaw/handler start` | Command run inside the sprite service (token is written to env file on the sprite) |
 | `SPRITE_SERVICE_START_DURATION` | `2s` | How long to stream service logs during start |
+| `SPRITE_FORWARD_ENV` | `ANTHROPIC_API_KEY,OPENAI_API_KEY,...` | Comma-separated env vars forwarded to sprite env file |
 | `SKYCLAW_AGENT_MODEL` | — | Optional model pattern passed to oh-my-pi (example: `openrouter/google/gemini-3-flash-preview`) |
 | `SKYCLAW_TOKEN` | *(required for handler)* | JWT from gateway's `/api/token/:userId` |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (handler) |

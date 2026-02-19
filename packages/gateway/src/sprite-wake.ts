@@ -1,8 +1,8 @@
 /**
  * Sprite wake orchestration.
  *
- * On message enqueue: ensure sprite exists, ensure handler service is configured,
- * and start the service.
+ * On message enqueue: ensure sprite exists, write env file via exec,
+ * ensure handler service is configured, and start the service.
  */
 
 import {
@@ -12,39 +12,30 @@ import {
   SPRITE_SERVICE_NAME,
   SPRITE_HANDLER_COMMAND,
   SPRITE_SERVICE_START_DURATION,
+  SPRITE_FORWARD_ENV,
   GATEWAY_URL,
 } from "./config.js";
 import { createToken } from "./auth.js";
 import {
   SpritesApiError,
   SpritesClient,
-  buildHandlerServiceDefinition,
+  writeEnvFile,
+  buildServiceDefinition,
   type ServiceLogEvent,
-  type SpriteStatus,
   type SpriteService,
+  type PutServiceInput,
 } from "@skyclaw/sprites";
 
 let spritesClient: SpritesClient | null = null;
 const inFlightWake = new Map<string, Promise<void>>();
 
 function buildHandlerEnv(): Record<string, string> {
-  const extraEnv: Record<string, string> = {};
-
-  const keys = [
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "SKYCLAW_AGENT_MODEL",
-  ] as const;
-
-  for (const key of keys) {
+  const env: Record<string, string> = {};
+  for (const key of SPRITE_FORWARD_ENV.split(",").map((k) => k.trim()).filter(Boolean)) {
     const value = process.env[key];
-    if (value && value.length > 0) {
-      extraEnv[key] = value;
-    }
+    if (value) env[key] = value;
   }
-
-  return extraEnv;
+  return env;
 }
 
 function sanitizeNamePart(value: string): string {
@@ -82,88 +73,41 @@ export function spritesEnabled(): boolean {
   return SPRITES_TOKEN !== null;
 }
 
-function equalArgs(left: string[] | undefined, right: string[] | undefined): boolean {
-  const a = left ?? [];
-  const b = right ?? [];
-  if (a.length !== b.length) return false;
-  return a.every((value, index) => value === b[index]);
-}
-
-function shouldStartService(
-  spriteStatus: SpriteStatus,
-  service: SpriteService,
+function definitionChanged(
+  existing: SpriteService,
+  desired: PutServiceInput,
 ): boolean {
-  // If the sprite machine itself is not running, force a start attempt.
-  if (spriteStatus !== "running") {
-    return true;
-  }
-
-  const serviceStatus = service.state?.status;
-  return serviceStatus !== "running" &&
-    serviceStatus !== "starting" &&
-    serviceStatus !== "stopping";
+  if (existing.cmd !== desired.cmd) return true;
+  const a = existing.args ?? [];
+  const b = desired.args ?? [];
+  if (a.length !== b.length) return true;
+  return !a.every((v, i) => v === b[i]);
 }
 
-function normalizeLogData(data: unknown): string {
-  if (typeof data !== "string") {
-    return JSON.stringify(data);
-  }
-  return data.replace(/\r?\n/g, " ").trim();
+function needsStart(service: SpriteService): boolean {
+  const status = service.state?.status;
+  return status !== "running" && status !== "starting" && status !== "stopping";
 }
 
-function logServiceStartEvents(
-  userId: string,
+async function getServiceSafe(
+  client: SpritesClient,
   spriteName: string,
-  serviceName: string,
-  logs: ServiceLogEvent[],
-): void {
-  if (logs.length === 0) {
-    console.log(
-      `[sprite] service start returned no logs user=${userId} sprite=${spriteName} service=${serviceName}`,
-    );
-    return;
+): Promise<SpriteService | null> {
+  try {
+    return await client.getService(spriteName, SPRITE_SERVICE_NAME);
+  } catch (error) {
+    if (error instanceof SpritesApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
   }
+}
 
-  const maxEvents = 25;
-  for (const entry of logs.slice(0, maxEvents)) {
-    const prefix = `[sprite] service ${entry.type} user=${userId} sprite=${spriteName} service=${serviceName}`;
-
-    if (entry.type === "stdout" || entry.type === "stderr") {
-      const line = normalizeLogData(entry.data);
-      if (!line) continue;
-      const truncated = line.length > 260 ? `${line.slice(0, 260)}...` : line;
-      if (entry.type === "stderr") {
-        console.warn(`${prefix}: ${truncated}`);
-      } else {
-        console.log(`${prefix}: ${truncated}`);
-      }
-      continue;
-    }
-
-    if (entry.type === "exit") {
-      const exitCode = entry.exit_code;
-      console.log(`${prefix}: exit_code=${String(exitCode)}`);
-      continue;
-    }
-
-    if (entry.type === "error") {
-      const line = normalizeLogData(entry.data);
-      console.warn(`${prefix}: ${line}`);
-      continue;
-    }
-
-    if (entry.type === "complete") {
-      const logFiles = "log_files" in entry ? JSON.stringify(entry.log_files) : "";
-      const suffix = logFiles ? ` log_files=${logFiles}` : "";
-      console.log(`${prefix}${suffix}`);
-      continue;
-    }
-  }
-
-  if (logs.length > maxEvents) {
-    console.log(
-      `[sprite] service logs truncated user=${userId} sprite=${spriteName} service=${serviceName} shown=${maxEvents} total=${logs.length}`,
-    );
+function logStartEvents(userId: string, logs: ServiceLogEvent[]): void {
+  for (const e of logs.slice(0, 10)) {
+    const data = typeof e.data === "string" ? e.data.trim() : e.type;
+    const fn = e.type === "stderr" || e.type === "error" ? "warn" : "log";
+    console[fn](`[sprite] ${e.type} user=${userId}: ${data.slice(0, 200)}`);
   }
 }
 
@@ -194,72 +138,34 @@ async function wakeSpriteForUserInner(userId: string): Promise<void> {
   const spriteName = spriteNameForUser(userId);
 
   try {
-    const skyclawToken = await createToken(userId, GATEWAY_URL);
-    const definition = buildHandlerServiceDefinition(
-      skyclawToken,
-      SPRITE_HANDLER_COMMAND,
-      buildHandlerEnv(),
-    );
+    await client.ensureSprite(spriteName);
 
-    const sprite = await client.ensureSprite(spriteName);
+    // 1. Exec: write env file to sprite
+    const token = await createToken(userId, GATEWAY_URL);
+    await writeEnvFile(client, spriteName, {
+      SKYCLAW_TOKEN: token,
+      ...buildHandlerEnv(),
+    });
 
-    let service: SpriteService | null = null;
-    try {
-      service = await client.getService(spriteName, SPRITE_SERVICE_NAME);
-    } catch (error) {
-      if (!(error instanceof SpritesApiError && error.status === 404)) {
-        throw error;
-      }
+    // 2. Ensure service definition
+    const def = buildServiceDefinition(SPRITE_HANDLER_COMMAND);
+    let svc = await getServiceSafe(client, spriteName);
+    if (!svc || definitionChanged(svc, def)) {
+      svc = await client.putService(spriteName, SPRITE_SERVICE_NAME, def);
     }
 
-    const definitionChanged =
-      !service ||
-      service.cmd !== definition.cmd ||
-      !equalArgs(service.args, definition.args);
-
-    if (definitionChanged) {
-      service = await client.putService(spriteName, SPRITE_SERVICE_NAME, {
-        cmd: definition.cmd,
-        args: definition.args,
-        needs: [],
-      });
-    }
-
-    if (!service) {
+    if (!svc) {
       return;
     }
 
-    const serviceStatus = service.state?.status ?? "unknown";
-    if (!shouldStartService(sprite.status, service)) {
-      console.log(
-        `[sprite] wake skipped user=${userId} sprite=${spriteName} sprite_status=${sprite.status} service=${SPRITE_SERVICE_NAME} service_status=${serviceStatus}`,
+    // 3. Start service if needed
+    if (needsStart(svc)) {
+      const logs = await client.startService(
+        spriteName,
+        SPRITE_SERVICE_NAME,
+        SPRITE_SERVICE_START_DURATION,
       );
-      return;
-    }
-
-    if (serviceStatus === "running" && sprite.status !== "running") {
-      console.log(
-        `[sprite] forcing start user=${userId} sprite=${spriteName} sprite_status=${sprite.status} service=${SPRITE_SERVICE_NAME} service_status=${serviceStatus}`,
-      );
-    }
-
-    const logs = await client.startService(
-      spriteName,
-      SPRITE_SERVICE_NAME,
-      SPRITE_SERVICE_START_DURATION,
-    );
-
-    console.log(
-      `[sprite] wake started user=${userId} sprite=${spriteName} sprite_status=${sprite.status} service=${SPRITE_SERVICE_NAME} prior_service_status=${serviceStatus}`,
-    );
-
-    logServiceStartEvents(userId, spriteName, SPRITE_SERVICE_NAME, logs);
-
-    const errorLog = logs.find((entry) => entry.type === "error");
-    if (errorLog) {
-      console.warn(
-        `[sprite] service error user=${userId} sprite=${spriteName}: ${JSON.stringify(errorLog).slice(0, 240)}`,
-      );
+      logStartEvents(userId, logs);
     }
   } catch (error) {
     if (error instanceof SpritesApiError) {

@@ -33,4 +33,3 @@ export function getDSBaseUrl(): string {
   return `http://localhost:${DS_PORT}`;
 }
 
-export { store, server };

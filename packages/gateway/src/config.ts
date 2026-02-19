@@ -4,27 +4,18 @@
  * Single source of truth for all paths and ports.
  */
 
-import { Config, Effect } from "effect";
+import { Config, Effect, Option } from "effect";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { mkdirSync, existsSync } from "node:fs";
-
-function expandHomePath(path: string): string {
-  if (path === "~") {
-    return homedir();
-  }
-  if (path.startsWith("~/")) {
-    return join(homedir(), path.slice(2));
-  }
-  return path;
-}
 
 // ── Config Schema ───────────────────────────────────────────
 
 const GatewayConfig = Config.all({
   skyRoot: Config.string("SKYCLAW_ROOT").pipe(
     Config.withDefault(join(homedir(), "skyclaw")),
-    Config.map((p) => resolve(expandHomePath(p))),
+    Config.map((p) =>
+      resolve(p.startsWith("~/") ? join(homedir(), p.slice(2)) : p === "~" ? homedir() : p),
+    ),
   ),
   port: Config.integer("PORT").pipe(Config.withDefault(3000)),
   dsPort: Config.integer("DS_PORT").pipe(Config.withDefault(4437)),
@@ -33,7 +24,6 @@ const GatewayConfig = Config.all({
   ),
   gatewayUrl: Config.option(Config.string("GATEWAY_URL")),
   spritesToken: Config.option(Config.string("SPRITES_TOKEN")),
-  spriteToken: Config.option(Config.string("SPRITE_TOKEN")),
   spritesApiBaseUrl: Config.string("SPRITES_API_BASE_URL").pipe(
     Config.withDefault("https://api.sprites.dev"),
   ),
@@ -48,6 +38,11 @@ const GatewayConfig = Config.all({
   ),
   spriteServiceStartDuration: Config.string("SPRITE_SERVICE_START_DURATION").pipe(
     Config.withDefault("2s"),
+  ),
+  spriteForwardEnv: Config.string("SPRITE_FORWARD_ENV").pipe(
+    Config.withDefault(
+      "ANTHROPIC_API_KEY,OPENAI_API_KEY,OPENROUTER_API_KEY,SKYCLAW_AGENT_MODEL",
+    ),
   ),
 });
 
@@ -64,20 +59,14 @@ export const STREAMS_DIR = join(DATA_DIR, "streams");
 export const PORT = loaded.port;
 export const DS_PORT = loaded.dsPort;
 export const JWT_SECRET = loaded.jwtSecret;
-export const GATEWAY_URL = loaded.gatewayUrl._tag === "Some"
-  ? loaded.gatewayUrl.value
-  : `http://localhost:${PORT}`;
-export const SPRITES_TOKEN =
-  loaded.spritesToken._tag === "Some"
-    ? loaded.spritesToken.value
-    : loaded.spriteToken._tag === "Some"
-      ? loaded.spriteToken.value
-      : null;
+export const GATEWAY_URL = Option.getOrElse(loaded.gatewayUrl, () => `http://localhost:${PORT}`);
+export const SPRITES_TOKEN = Option.getOrNull(loaded.spritesToken);
 export const SPRITES_API_BASE_URL = loaded.spritesApiBaseUrl;
 export const SPRITE_NAME_PREFIX = loaded.spriteNamePrefix;
 export const SPRITE_SERVICE_NAME = loaded.spriteServiceName;
 export const SPRITE_HANDLER_COMMAND = loaded.spriteHandlerCommand;
 export const SPRITE_SERVICE_START_DURATION = loaded.spriteServiceStartDuration;
+export const SPRITE_FORWARD_ENV = loaded.spriteForwardEnv;
 
 // ── Paths object for init/logging ───────────────────────────
 
@@ -87,11 +76,3 @@ export const paths = {
   streams: STREAMS_DIR,
 } as const;
 
-// ── Ensure directories exist ─────────────────────────────────
-
-if (!existsSync(DATA_DIR)) {
-  mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!existsSync(STREAMS_DIR)) {
-  mkdirSync(STREAMS_DIR, { recursive: true });
-}

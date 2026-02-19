@@ -9,6 +9,7 @@ import {
   DurableStream,
   DurableStreamError,
   FetchError,
+  type StreamResponse,
 } from "@durable-streams/client";
 
 const JSON_CONTENT_TYPE = "application/json";
@@ -34,12 +35,16 @@ function isConflictExists(error: unknown): boolean {
 /**
  * DSClient — manages stream handles and provides append/ensure/read operations.
  */
+export { type StreamResponse };
+
 export class DSClient {
   private baseUrl: string;
+  private headers?: Record<string, string>;
   private handles = new Map<string, DurableStream>();
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, opts?: { headers?: Record<string, string> }) {
     this.baseUrl = baseUrl;
+    this.headers = opts?.headers;
   }
 
   private dsUrl(path: string): string {
@@ -53,6 +58,7 @@ export class DSClient {
     const handle = new DurableStream({
       url: this.dsUrl(path),
       contentType: JSON_CONTENT_TYPE,
+      ...(this.headers && { headers: this.headers }),
     });
     this.handles.set(path, handle);
     return handle;
@@ -86,6 +92,23 @@ export class DSClient {
     // Stream didn't exist — create and retry
     await this.ensureStream(path);
     await handle.append(body);
+  }
+
+  /** Stream JSON messages from a DS stream. */
+  async streamJson<T>(
+    path: string,
+    opts?: {
+      offset?: string;
+      live?: boolean | "sse" | "long-poll";
+      signal?: AbortSignal;
+    },
+  ): Promise<StreamResponse<T>> {
+    const handle = this.getHandle(path);
+    return handle.stream<T>({
+      offset: opts?.offset,
+      live: opts?.live,
+      signal: opts?.signal,
+    });
   }
 
   /** Get the raw DurableStream handle for advanced operations (read, subscribe). */

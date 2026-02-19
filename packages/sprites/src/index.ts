@@ -2,6 +2,7 @@ export {
   SpritesApiError,
   SpritesClient,
   parseNdjson,
+  type ExecResult,
   type SpriteRecord,
   type SpriteStatus,
   type SpriteService,
@@ -13,5 +14,6 @@ export {
 } from "./client.js";
 
 export {
-  buildHandlerServiceDefinition,
+  writeEnvFile,
+  buildServiceDefinition,
 } from "./handler-service.js";

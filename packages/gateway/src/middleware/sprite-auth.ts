@@ -49,8 +49,6 @@ export const spriteAuth = (extractUserId: (path: string) => string | null) =>
       });
     }
 
-    // Store on context for downstream handlers
-    c.set("spriteUserId", payload.userId);
     await next();
   });
 

@@ -2,10 +2,10 @@
  * DS Reader — read pending messages from user inbox
  *
  * Reads all events from the user's inbox DS since the last stored offset.
- * Uses plain HTTP fetch to the gateway's DS proxy (which forwards to the DS server).
+ * Uses DSClient.streamJson() to the gateway's DS proxy (which forwards to the DS server).
  */
 
-import { FileOffsetStore, type OffsetStore } from "@skyclaw/ds";
+import { DSClient, FileOffsetStore, type OffsetStore } from "@skyclaw/ds";
 import { DS_STREAMS, type SkyEvent } from "@skyclaw/schema";
 import { join } from "node:path";
 import { DATA_DIR } from "@skyclaw/agent";
@@ -18,8 +18,8 @@ export interface PendingMessages {
 /**
  * Read all pending messages from a user's inbox.
  *
- * Fetches from the gateway's DS proxy via HTTP GET.
- * The DS server returns a JSON array + offset headers.
+ * Uses DSClient to stream from the gateway's DS proxy.
+ * Catches up on all pending events (live: false) then returns.
  */
 export async function readPendingMessages(
   gatewayUrl: string,
@@ -31,39 +31,22 @@ export async function readPendingMessages(
   const feedKey = `inbox:${userId}`;
   const lastOffset = await offsetStore.get(feedKey);
 
-  // Build the DS proxy URL with offset if we have one
-  let url = `${gatewayUrl}/ds/${streamPath}`;
-  if (lastOffset) {
-    url += `?offset=${encodeURIComponent(lastOffset)}`;
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
+  const dsClient = new DSClient(`${gatewayUrl}/ds`, { headers });
+
   try {
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+    const res = await dsClient.streamJson<SkyEvent>(streamPath, {
+      offset: lastOffset ?? undefined,
+      live: false,
+    });
 
-    const res = await fetch(url, { headers });
+    const events = await res.json();
 
-    if (!res.ok) {
-      if (res.status === 404) {
-        return { events: [], lastOffset };
-      }
-      throw new Error(`DS read failed: ${res.status} ${res.statusText}`);
-    }
-
-    const body = await res.text();
-    if (!body || body.trim() === "[]" || body.trim() === "") {
-      return { events: [], lastOffset };
-    }
-
-    const events: SkyEvent[] = JSON.parse(body);
-    if (!Array.isArray(events) || events.length === 0) {
-      return { events: [], lastOffset };
-    }
-
-    // Get the next offset from response headers
-    const nextOffset = res.headers.get("Stream-Next-Offset") ?? lastOffset;
+    const nextOffset = res.offset ?? lastOffset;
     if (nextOffset && nextOffset !== lastOffset) {
       await offsetStore.set(feedKey, nextOffset);
     }
