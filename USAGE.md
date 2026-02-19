@@ -243,6 +243,7 @@ curl -s -X POST http://localhost:3000/api/rpc/responses/get \
 | `SPRITE_SERVICE_NAME` | `handler` | Service name created/started on each sprite |
 | `SPRITE_HANDLER_COMMAND` | `bunx @skyclaw/handler start` | Command run inside the sprite service (`SKYCLAW_TOKEN` is injected automatically) |
 | `SPRITE_SERVICE_START_DURATION` | `2s` | How long to stream service logs during start |
+| `SKYCLAW_AGENT_MODEL` | — | Optional model pattern passed to oh-my-pi (example: `openrouter/google/gemini-3-flash-preview`) |
 | `SKYCLAW_TOKEN` | *(required for handler)* | JWT from gateway's `/api/token/:userId` |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (handler) |
 | `OPENAI_API_KEY` | — | OpenAI API key (handler) |

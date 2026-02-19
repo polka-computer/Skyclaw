@@ -9,12 +9,22 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";
 
+function expandHomePath(path: string): string {
+  if (path === "~") {
+    return homedir();
+  }
+  if (path.startsWith("~/")) {
+    return join(homedir(), path.slice(2));
+  }
+  return path;
+}
+
 // ── Config Schema ───────────────────────────────────────────
 
 const GatewayConfig = Config.all({
   skyRoot: Config.string("SKYCLAW_ROOT").pipe(
     Config.withDefault(join(homedir(), "skyclaw")),
-    Config.map((p) => resolve(p)),
+    Config.map((p) => resolve(expandHomePath(p))),
   ),
   port: Config.integer("PORT").pipe(Config.withDefault(3000)),
   dsPort: Config.integer("DS_PORT").pipe(Config.withDefault(4437)),

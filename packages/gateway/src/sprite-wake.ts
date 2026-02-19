@@ -19,11 +19,33 @@ import {
   SpritesApiError,
   SpritesClient,
   buildHandlerServiceDefinition,
+  type ServiceLogEvent,
+  type SpriteStatus,
   type SpriteService,
 } from "@skyclaw/sprites";
 
 let spritesClient: SpritesClient | null = null;
 const inFlightWake = new Map<string, Promise<void>>();
+
+function buildHandlerEnv(): Record<string, string> {
+  const extraEnv: Record<string, string> = {};
+
+  const keys = [
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "SKYCLAW_AGENT_MODEL",
+  ] as const;
+
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value && value.length > 0) {
+      extraEnv[key] = value;
+    }
+  }
+
+  return extraEnv;
+}
 
 function sanitizeNamePart(value: string): string {
   return value
@@ -67,9 +89,82 @@ function equalArgs(left: string[] | undefined, right: string[] | undefined): boo
   return a.every((value, index) => value === b[index]);
 }
 
-function shouldStartService(service: SpriteService): boolean {
-  const status = service.state?.status;
-  return status !== "running" && status !== "starting" && status !== "stopping";
+function shouldStartService(
+  spriteStatus: SpriteStatus,
+  service: SpriteService,
+): boolean {
+  // If the sprite machine itself is not running, force a start attempt.
+  if (spriteStatus !== "running") {
+    return true;
+  }
+
+  const serviceStatus = service.state?.status;
+  return serviceStatus !== "running" &&
+    serviceStatus !== "starting" &&
+    serviceStatus !== "stopping";
+}
+
+function normalizeLogData(data: unknown): string {
+  if (typeof data !== "string") {
+    return JSON.stringify(data);
+  }
+  return data.replace(/\r?\n/g, " ").trim();
+}
+
+function logServiceStartEvents(
+  userId: string,
+  spriteName: string,
+  serviceName: string,
+  logs: ServiceLogEvent[],
+): void {
+  if (logs.length === 0) {
+    console.log(
+      `[sprite] service start returned no logs user=${userId} sprite=${spriteName} service=${serviceName}`,
+    );
+    return;
+  }
+
+  const maxEvents = 25;
+  for (const entry of logs.slice(0, maxEvents)) {
+    const prefix = `[sprite] service ${entry.type} user=${userId} sprite=${spriteName} service=${serviceName}`;
+
+    if (entry.type === "stdout" || entry.type === "stderr") {
+      const line = normalizeLogData(entry.data);
+      if (!line) continue;
+      const truncated = line.length > 260 ? `${line.slice(0, 260)}...` : line;
+      if (entry.type === "stderr") {
+        console.warn(`${prefix}: ${truncated}`);
+      } else {
+        console.log(`${prefix}: ${truncated}`);
+      }
+      continue;
+    }
+
+    if (entry.type === "exit") {
+      const exitCode = entry.exit_code;
+      console.log(`${prefix}: exit_code=${String(exitCode)}`);
+      continue;
+    }
+
+    if (entry.type === "error") {
+      const line = normalizeLogData(entry.data);
+      console.warn(`${prefix}: ${line}`);
+      continue;
+    }
+
+    if (entry.type === "complete") {
+      const logFiles = "log_files" in entry ? JSON.stringify(entry.log_files) : "";
+      const suffix = logFiles ? ` log_files=${logFiles}` : "";
+      console.log(`${prefix}${suffix}`);
+      continue;
+    }
+  }
+
+  if (logs.length > maxEvents) {
+    console.log(
+      `[sprite] service logs truncated user=${userId} sprite=${spriteName} service=${serviceName} shown=${maxEvents} total=${logs.length}`,
+    );
+  }
 }
 
 /**
@@ -103,9 +198,10 @@ async function wakeSpriteForUserInner(userId: string): Promise<void> {
     const definition = buildHandlerServiceDefinition(
       skyclawToken,
       SPRITE_HANDLER_COMMAND,
+      buildHandlerEnv(),
     );
 
-    await client.ensureSprite(spriteName);
+    const sprite = await client.ensureSprite(spriteName);
 
     let service: SpriteService | null = null;
     try {
@@ -133,12 +229,18 @@ async function wakeSpriteForUserInner(userId: string): Promise<void> {
       return;
     }
 
-    const status = service.state?.status ?? "unknown";
-    if (!shouldStartService(service)) {
+    const serviceStatus = service.state?.status ?? "unknown";
+    if (!shouldStartService(sprite.status, service)) {
       console.log(
-        `[sprite] wake skipped user=${userId} sprite=${spriteName} service=${SPRITE_SERVICE_NAME} status=${status}`,
+        `[sprite] wake skipped user=${userId} sprite=${spriteName} sprite_status=${sprite.status} service=${SPRITE_SERVICE_NAME} service_status=${serviceStatus}`,
       );
       return;
+    }
+
+    if (serviceStatus === "running" && sprite.status !== "running") {
+      console.log(
+        `[sprite] forcing start user=${userId} sprite=${spriteName} sprite_status=${sprite.status} service=${SPRITE_SERVICE_NAME} service_status=${serviceStatus}`,
+      );
     }
 
     const logs = await client.startService(
@@ -148,8 +250,10 @@ async function wakeSpriteForUserInner(userId: string): Promise<void> {
     );
 
     console.log(
-      `[sprite] wake started user=${userId} sprite=${spriteName} service=${SPRITE_SERVICE_NAME} prior_status=${status}`,
+      `[sprite] wake started user=${userId} sprite=${spriteName} sprite_status=${sprite.status} service=${SPRITE_SERVICE_NAME} prior_service_status=${serviceStatus}`,
     );
+
+    logServiceStartEvents(userId, spriteName, SPRITE_SERVICE_NAME, logs);
 
     const errorLog = logs.find((entry) => entry.type === "error");
     if (errorLog) {

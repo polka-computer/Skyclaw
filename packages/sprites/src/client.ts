@@ -99,12 +99,86 @@ function buildQuery(query: Record<string, string | undefined> | undefined): stri
   return encoded.length > 0 ? `?${encoded}` : "";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isSpriteService(value: unknown): value is SpriteService {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.name === "string" &&
+    typeof value.cmd === "string" &&
+    isStringArray(value.args) &&
+    isStringArray(value.needs) &&
+    (typeof value.http_port === "number" || value.http_port === null)
+  );
+}
+
+function toServiceLogEvents(value: unknown): ServiceLogEvent[] {
+  if (Array.isArray(value)) {
+    return value.filter(isRecord).map((entry) => entry as ServiceLogEvent);
+  }
+
+  if (isRecord(value)) {
+    return [value as ServiceLogEvent];
+  }
+
+  return [];
+}
+
 export function parseNdjson(raw: string): ServiceLogEvent[] {
-  return raw
-    .split(/\r?\n/g)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as ServiceLogEvent);
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  // Some environments return JSON arrays/objects instead of newline-delimited JSON.
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const events = toServiceLogEvents(parsed);
+      if (events.length > 0) {
+        return events;
+      }
+    } catch {
+      // Fall through to line-oriented parsing.
+    }
+  }
+
+  const events: ServiceLogEvent[] = [];
+  for (const line of raw.split(/\r?\n/g)) {
+    const candidate = line.trim();
+    if (!candidate || candidate.startsWith("event:")) {
+      continue;
+    }
+
+    const payload = candidate.startsWith("data:")
+      ? candidate.slice("data:".length).trim()
+      : candidate;
+    if (!payload || payload === "[DONE]") {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(payload);
+      events.push(...toServiceLogEvents(parsed));
+    } catch {
+      // Ignore non-JSON log framing lines.
+    }
+  }
+
+  if (events.length === 0) {
+    throw new SyntaxError("Failed to parse service logs as JSON/NDJSON");
+  }
+
+  return events;
 }
 
 export class SpritesClient {
@@ -164,7 +238,23 @@ export class SpritesClient {
     options: RequestOptions = {},
   ): Promise<T> {
     const response = await this.request(method, path, options);
-    return (await response.json()) as T;
+    const raw = await response.text();
+
+    if (!raw.trim()) {
+      throw new Error(
+        `Sprites API ${method} ${path} returned an empty response body`,
+      );
+    }
+
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      const contentType = response.headers.get("content-type") ?? "unknown";
+      const snippet = raw.slice(0, 240).replace(/\s+/g, " ");
+      throw new Error(
+        `Sprites API ${method} ${path} returned non-JSON body (content-type=${contentType}): ${snippet}`,
+      );
+    }
   }
 
   async getSprite(name: string): Promise<SpriteRecord> {
@@ -203,18 +293,42 @@ export class SpritesClient {
     serviceName: string,
     input: PutServiceInput,
   ): Promise<SpriteService> {
-    return this.requestJson<SpriteService>(
-      "PUT",
-      `/v1/sprites/${encodeURIComponent(spriteName)}/services/${encodeURIComponent(serviceName)}`,
-      {
-        body: {
-          cmd: input.cmd,
-          args: input.args ?? [],
-          needs: input.needs ?? [],
-          http_port: input.http_port ?? null,
-        },
+    const path = `/v1/sprites/${encodeURIComponent(spriteName)}/services/${encodeURIComponent(serviceName)}`;
+    const response = await this.request("PUT", path, {
+      body: {
+        cmd: input.cmd,
+        args: input.args ?? [],
+        needs: input.needs ?? [],
+        http_port: input.http_port ?? null,
       },
-    );
+    });
+
+    const raw = await response.text();
+    const trimmed = raw.trim();
+
+    if (!trimmed) {
+      return this.getService(spriteName, serviceName);
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (isSpriteService(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Fall through; some environments stream NDJSON logs from PUT.
+    }
+
+    try {
+      parseNdjson(raw);
+      return this.getService(spriteName, serviceName);
+    } catch {
+      const contentType = response.headers.get("content-type") ?? "unknown";
+      const snippet = raw.slice(0, 240).replace(/\s+/g, " ");
+      throw new Error(
+        `Sprites API PUT ${path} returned unexpected body (content-type=${contentType}): ${snippet}`,
+      );
+    }
   }
 
   async startService(

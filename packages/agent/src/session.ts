@@ -63,6 +63,10 @@ export async function getOrCreateSession(
   }
 
   const systemPrompt = buildSystemPrompt(opts.userId, skills);
+  const modelPattern = process.env.SKYCLAW_AGENT_MODEL?.trim();
+  if (modelPattern) {
+    console.log(`[agent] model pattern: ${modelPattern}`);
+  }
 
   const result: CreateAgentSessionResult = await createAgentSession({
     cwd: mcpDir,
@@ -70,6 +74,7 @@ export async function getOrCreateSession(
     enableMCP: true,
     enableLsp: false,
     systemPrompt,
+    ...(modelPattern ? { modelPattern } : {}),
     hasUI: false,
     // Don't give it filesystem tools — it talks to the world through MCP
     toolNames: [],

@@ -4,9 +4,20 @@
 export function buildHandlerServiceDefinition(
   skyclawToken: string,
   handlerCommand = "bunx @skyclaw/handler start",
+  extraEnv: Record<string, string> = {},
 ): { cmd: string; args: string[] } {
+  const extraEnvArgs = Object.entries(extraEnv).map(
+    ([key, value]) => `${key}=${value}`,
+  );
+
   return {
     cmd: "env",
-    args: [`SKYCLAW_TOKEN=${skyclawToken}`, "bash", "-lc", handlerCommand],
+    args: [
+      `SKYCLAW_TOKEN=${skyclawToken}`,
+      ...extraEnvArgs,
+      "bash",
+      "-lc",
+      handlerCommand,
+    ],
   };
 }
