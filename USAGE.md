@@ -235,7 +235,9 @@ curl -s -X POST http://localhost:3000/api/rpc/responses/get \
 | `SPRITES_API_BASE_URL` | `https://api.sprites.dev` | Sprites API base URL |
 | `SPRITE_NAME_PREFIX` | `skyclaw-` | Prefix for per-user sprite names |
 | `SPRITE_SERVICE_NAME` | `handler` | Service name created/started on each sprite |
-| `SPRITE_HANDLER_COMMAND` | `bunx github:polka-computer/Skyclaw start` | Command run inside the sprite service (token is written to env file on the sprite) |
+| `SPRITE_HANDLER_COMMAND` | `/home/sprite/.skyclaw/boot.sh start` | Command run inside the sprite service (token is written to env file on the sprite) |
+| `SPRITE_HANDLER_REPO` | `https://github.com/polka-computer/Skyclaw.git` | Repo cloned by the boot script on each sprite wake |
+| `SPRITE_HANDLER_BRANCH` | `master` | Git branch checked out by the sprite boot script |
 | `SPRITE_SERVICE_START_DURATION` | `2s` | How long to stream service logs during start |
 | `SPRITE_FORWARD_ENV` | `ANTHROPIC_API_KEY,OPENAI_API_KEY,...` | Comma-separated env vars forwarded to sprite env file |
 | `SKYCLAW_AGENT_MODEL` | — | Optional model pattern passed to oh-my-pi (example: `openrouter/google/gemini-3-flash-preview`) |

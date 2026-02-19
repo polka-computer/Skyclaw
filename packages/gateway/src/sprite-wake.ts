@@ -11,6 +11,8 @@ import {
   SPRITE_NAME_PREFIX,
   SPRITE_SERVICE_NAME,
   SPRITE_HANDLER_COMMAND,
+  SPRITE_HANDLER_REPO,
+  SPRITE_HANDLER_BRANCH,
   SPRITE_SERVICE_START_DURATION,
   SPRITE_FORWARD_ENV,
   GATEWAY_URL,
@@ -19,7 +21,7 @@ import { createToken } from "./auth.js";
 import {
   SpritesApiError,
   SpritesClient,
-  writeEnvFile,
+  writeBootFiles,
   buildServiceDefinition,
   type ServiceLogEvent,
   type SpriteService,
@@ -140,11 +142,12 @@ async function wakeSpriteForUserInner(userId: string): Promise<void> {
   try {
     await client.ensureSprite(spriteName);
 
-    // 1. Exec: write env file to sprite
+    // 1. Exec: write env file + boot script to sprite
     const token = await createToken(userId, GATEWAY_URL);
-    await writeEnvFile(client, spriteName, {
-      SKYCLAW_TOKEN: token,
-      ...buildHandlerEnv(),
+    await writeBootFiles(client, spriteName, {
+      env: { SKYCLAW_TOKEN: token, ...buildHandlerEnv() },
+      repoUrl: SPRITE_HANDLER_REPO,
+      branch: SPRITE_HANDLER_BRANCH,
     });
 
     // 2. Ensure service definition

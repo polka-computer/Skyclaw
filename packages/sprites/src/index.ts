@@ -14,6 +14,6 @@ export {
 } from "./client.js";
 
 export {
-  writeEnvFile,
+  writeBootFiles,
   buildServiceDefinition,
 } from "./handler-service.js";

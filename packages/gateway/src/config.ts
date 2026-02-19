@@ -34,7 +34,13 @@ const GatewayConfig = Config.all({
     Config.withDefault("handler"),
   ),
   spriteHandlerCommand: Config.string("SPRITE_HANDLER_COMMAND").pipe(
-    Config.withDefault("bunx github:polka-computer/Skyclaw start"),
+    Config.withDefault("/home/sprite/.skyclaw/boot.sh start"),
+  ),
+  spriteHandlerRepo: Config.string("SPRITE_HANDLER_REPO").pipe(
+    Config.withDefault("https://github.com/polka-computer/Skyclaw.git"),
+  ),
+  spriteHandlerBranch: Config.string("SPRITE_HANDLER_BRANCH").pipe(
+    Config.withDefault("master"),
   ),
   spriteServiceStartDuration: Config.string("SPRITE_SERVICE_START_DURATION").pipe(
     Config.withDefault("2s"),
@@ -66,6 +72,8 @@ export const SPRITE_NAME_PREFIX = loaded.spriteNamePrefix;
 export const SPRITE_SERVICE_NAME = loaded.spriteServiceName;
 export const SPRITE_HANDLER_COMMAND = loaded.spriteHandlerCommand;
 export const SPRITE_SERVICE_START_DURATION = loaded.spriteServiceStartDuration;
+export const SPRITE_HANDLER_REPO = loaded.spriteHandlerRepo;
+export const SPRITE_HANDLER_BRANCH = loaded.spriteHandlerBranch;
 export const SPRITE_FORWARD_ENV = loaded.spriteForwardEnv;
 
 // ── Paths object for init/logging ───────────────────────────
