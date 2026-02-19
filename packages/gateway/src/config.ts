@@ -34,7 +34,7 @@ const GatewayConfig = Config.all({
     Config.withDefault("handler"),
   ),
   spriteHandlerCommand: Config.string("SPRITE_HANDLER_COMMAND").pipe(
-    Config.withDefault("bunx @skyclaw/handler start"),
+    Config.withDefault("bunx github:polka-computer/Skyclaw start"),
   ),
   spriteServiceStartDuration: Config.string("SPRITE_SERVICE_START_DURATION").pipe(
     Config.withDefault("2s"),

@@ -263,11 +263,23 @@ export class SpritesClient {
     const body: Record<string, unknown> = {};
     if (options?.env) body.env = options.env;
     if (options?.dir) body.dir = options.dir;
-    return this.requestJson<ExecResult>(
+    const response = await this.request(
       "POST",
       path,
       Object.keys(body).length > 0 ? { body } : {},
     );
+    const raw = await response.text();
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json") && raw.trim()) {
+      try {
+        return JSON.parse(raw) as ExecResult;
+      } catch {
+        // fall through to raw handling
+      }
+    }
+    // API returns raw stdout as octet-stream — synthesize ExecResult.
+    // Non-200 responses already throw via this.request().
+    return { stdout: raw, stderr: "", exit_code: 0 };
   }
 
   async startService(

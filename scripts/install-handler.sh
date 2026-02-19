@@ -4,10 +4,10 @@ set -euo pipefail
 # Install skyclaw-handler binary + oh-my-pi native addon.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/longtailLABS/skyclaw/master/scripts/install-handler.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/polka-computer/Skyclaw/master/scripts/install-handler.sh | bash
 #   curl -fsSL ... | INSTALL_DIR=/opt/bin VERSION=v0.1.0 bash
 
-REPO="longtailLABS/skyclaw"
+REPO="polka-computer/Skyclaw"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-latest}"
 

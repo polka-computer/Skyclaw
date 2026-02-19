@@ -81,7 +81,6 @@ Optional sprite wake mode (in `.env`):
 ```bash
 SPRITES_TOKEN="<sprites api token>"
 GATEWAY_URL="https://your-gateway-host"
-SPRITE_HANDLER_COMMAND="bunx @skyclaw/handler start"
 ```
 
 With these set, every new inbox message triggers sprite service start automatically.
@@ -181,29 +180,24 @@ Send another message (step 2) and run the handler again to process it.
 
 ## Sprite E2E Locally (No npm Publish Required)
 
-You can test sprite wake + handler execution without publishing `@skyclaw/handler`.
+No npm publish required — the default `SPRITE_HANDLER_COMMAND` pulls directly from GitHub via `bunx github:polka-computer/Skyclaw`.
 
-1. Expose your gateway to the public internet (ngrok/Cloudflare tunnel/etc) and set `GATEWAY_URL` in `.env`.
+1. Expose your gateway to the public internet (ngrok/Cloudflare tunnel/localtunnel) and set `GATEWAY_URL` in `.env`.
 2. Set `SPRITES_TOKEN` in `.env`.
-3. Set `SPRITE_HANDLER_COMMAND` in `.env` to run handler from a repo checkout on the sprite:
+3. Start gateway locally: `bun run gateway`.
+4. Send a message via `/api/rpc/messages/send`.
+5. Check gateway logs for `[sprite] wake ...` and fetch response via `/api/rpc/responses/get`.
+
+For production, use a compiled binary from GitHub releases:
 
 ```bash
-SPRITE_HANDLER_COMMAND="bun run /home/sprite/skyclaw/packages/handler/src/cli/index.ts start"
+SPRITE_HANDLER_COMMAND="/home/sprite/.local/bin/skyclaw-handler start"
 ```
 
-4. On the sprite machine, do a one-time bootstrap:
-
+Install script (run once or on wake):
 ```bash
-git clone <your-repo-url> /home/sprite/skyclaw
-cd /home/sprite/skyclaw
-bun install
+curl -fsSL https://raw.githubusercontent.com/polka-computer/Skyclaw/master/scripts/install-handler.sh | bash
 ```
-
-5. Start gateway locally: `bun run gateway`.
-6. Send a message via `/api/rpc/messages/send`.
-7. Check gateway logs for `[sprite] wake ...` and fetch response via `/api/rpc/responses/get`.
-
-If you prefer not to keep a repo checkout on each sprite, use the default `SPRITE_HANDLER_COMMAND=bunx @skyclaw/handler start` and publish handler versions to npm.
 
 ## Quick One-Liner Test
 
@@ -241,7 +235,7 @@ curl -s -X POST http://localhost:3000/api/rpc/responses/get \
 | `SPRITES_API_BASE_URL` | `https://api.sprites.dev` | Sprites API base URL |
 | `SPRITE_NAME_PREFIX` | `skyclaw-` | Prefix for per-user sprite names |
 | `SPRITE_SERVICE_NAME` | `handler` | Service name created/started on each sprite |
-| `SPRITE_HANDLER_COMMAND` | `bunx @skyclaw/handler start` | Command run inside the sprite service (token is written to env file on the sprite) |
+| `SPRITE_HANDLER_COMMAND` | `bunx github:polka-computer/Skyclaw start` | Command run inside the sprite service (token is written to env file on the sprite) |
 | `SPRITE_SERVICE_START_DURATION` | `2s` | How long to stream service logs during start |
 | `SPRITE_FORWARD_ENV` | `ANTHROPIC_API_KEY,OPENAI_API_KEY,...` | Comma-separated env vars forwarded to sprite env file |
 | `SKYCLAW_AGENT_MODEL` | — | Optional model pattern passed to oh-my-pi (example: `openrouter/google/gemini-3-flash-preview`) |
